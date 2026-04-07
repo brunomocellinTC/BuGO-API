@@ -36,7 +36,7 @@ export type FormConfig = {
 };
 
 export const formConfig: FormConfig = {
-  title: "Azure Work Item Creator",
+  title: "BuGO",
   description: "Abra Bugs, Issues e Tasks com destino sincronizado no Azure DevOps.",
   basePath: "ti-testingcompany / Inovacao",
   kinds: [
@@ -60,14 +60,7 @@ export const formConfig: FormConfig = {
     }
   ],
   titleTags: [
-    { value: "Android", label: "Android" },
-    { value: "iOS", label: "iOS" },
-    { value: "Website", label: "Website" },
-    { value: "Chatbot", label: "Chatbot" },
-    { value: "Quickstack", label: "Quickstack" },
-    { value: "Ponto", label: "Ponto" },
-    { value: "SquadGo", label: "SquadGo" },
-    { value: "RH", label: "RH" }
+    { value: "", label: "" },
   ],
   people: [
     { value: "Bruno Mocellin", label: "Bruno Mocellin" },
@@ -150,7 +143,7 @@ export const formConfig: FormConfig = {
       id: "activity",
       label: "Activity",
       type: "select",
-      defaultValue: "Development",
+      defaultValue: "Testing",
       options: [
         { value: "Development", label: "Development" },
         { value: "Testing", label: "Testing" },

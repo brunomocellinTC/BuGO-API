@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const workItemPayloadSchema = z.object({
   kind: z.enum(["bug", "issue", "task"]),
@@ -238,6 +238,21 @@ function createTitle(payload: WorkItemPayload) {
   return `[${payload.titleTag}] ${payload.titleText}`;
 }
 
+function formatBddStep(step: string) {
+  const trimmed = step.trim();
+  const match = trimmed.match(/^(quando|e|ent[aã]o)\b\s*(.*)$/i);
+
+  if (!match) {
+    return trimmed;
+  }
+
+  const keywordRaw = match[1].toLowerCase();
+  const keyword = keywordRaw.startsWith("ent") ? "Então" : keywordRaw === "e" ? "E" : "Quando";
+  const tail = match[2]?.trim();
+
+  return `**${keyword}**${tail ? ` ${tail}` : ""}`;
+}
+
 function createSystemInfoText(payload: WorkItemPayload) {
   return payload.systemInfo
     .map((item) => {
@@ -257,7 +272,7 @@ function createSystemInfoText(payload: WorkItemPayload) {
 function createDescription(payload: WorkItemPayload) {
   const systemInfoText = createSystemInfoText(payload);
   const stepsText = payload.steps.length > 0
-    ? ["Steps:", ...payload.steps.map((step, index) => `${index + 1}. ${step}`)].join("\n")
+    ? ["Steps:", ...payload.steps.map((step, index) => `${index + 1}. ${formatBddStep(step)}`)].join("\n")
     : undefined;
   const videoNames = payload.attachments
     .filter((file) => file.type.startsWith("video/"))
@@ -449,7 +464,7 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   const title = createTitle(payload);
   const description = createDescription(payload);
   const systemInfoText = createSystemInfoText(payload);
-  const stepsText = payload.steps.map((step, index) => `${index + 1}. ${step}`).join("\n");
+  const stepsText = payload.steps.map((step, index) => `${index + 1}. ${formatBddStep(step)}`).join("\n");
 
   addOperation(operations, azure.fields.title, title);
   addOperation(operations, azure.fields.description, description);
@@ -519,3 +534,5 @@ export async function getAzureRelationTypes() {
     "/_apis/wit/workitemrelationtypes?api-version=7.1"
   );
 }
+
+

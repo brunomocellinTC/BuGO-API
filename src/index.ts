@@ -16,7 +16,9 @@ import {
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
 const apiRootDir = path.resolve(currentDir, "..");
-const clientDistPath = path.resolve(currentDir, "../../front/dist");
+const clientDistPath = path.resolve(currentDir, "../../BuGO-Front/dist");
+const shouldServeClient =
+  process.env.NODE_ENV === "production" || process.env.SERVE_CLIENT === "true";
 
 dotenv.config({ path: path.resolve(apiRootDir, ".env") });
 dotenv.config();
@@ -91,16 +93,20 @@ app.post("/api/work-items", async (request: Request, response: Response) => {
   }
 });
 
-app.use(express.static(clientDistPath));
+if (shouldServeClient) {
+  app.use(express.static(clientDistPath));
 
-app.get("*", (request: Request, response: Response, next: NextFunction) => {
-  if (request.path.startsWith("/api/")) {
-    return next();
-  }
+  app.get("*", (request: Request, response: Response, next: NextFunction) => {
+    if (request.path.startsWith("/api/")) {
+      return next();
+    }
 
-  response.sendFile(path.join(clientDistPath, "index.html"));
-});
+    response.sendFile(path.join(clientDistPath, "index.html"));
+  });
+}
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
+
+
