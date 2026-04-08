@@ -90,10 +90,10 @@ export const formConfig: FormConfig = {
       id: "madeBy",
       label: "Made By",
       type: "select",
-      required: true,
-      defaultValue: "Interno",
+      required: false,
+      defaultValue: "",
       options: [
-        { value: "Interno", label: "Interno" },
+        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
         { value: "QA", label: "QA" },
         { value: "Suporte", label: "Suporte" }
       ]
@@ -145,10 +145,12 @@ export const formConfig: FormConfig = {
       type: "select",
       defaultValue: "Testing",
       options: [
-        { value: "Development", label: "Development" },
-        { value: "Testing", label: "Testing" },
+        { value: "Deployment", label: "Deployment" },
         { value: "Design", label: "Design" },
-        { value: "Analysis", label: "Analysis" }
+        { value: "Development", label: "Development" },
+        { value: "Documentation", label: "Documentation" },
+        { value: "Requirements", label: "Requirements" },
+        { value: "Testing", label: "Testing" },
       ]
     },
     {
@@ -157,9 +159,10 @@ export const formConfig: FormConfig = {
       type: "select",
       defaultValue: "Staging",
       options: [
-        { value: "Development", label: "Development" },
+        { value: "Develop", label: "Develop" },
+        { value: "Production", label: "Production" },
         { value: "Staging", label: "Staging" },
-        { value: "Production", label: "Production" }
+        { value: "Test", label: "Test" },
       ]
     },
     {
@@ -185,10 +188,10 @@ export const formConfig: FormConfig = {
       id: "madeBy",
       label: "Made By",
       type: "select",
-      required: true,
-      defaultValue: "Interno",
+      required: false,
+      defaultValue: "",
       options: [
-        { value: "Interno", label: "Interno" },
+        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
         { value: "QA", label: "QA" },
         { value: "Suporte", label: "Suporte" }
       ]
@@ -251,10 +254,10 @@ export const formConfig: FormConfig = {
       id: "madeBy",
       label: "Made By",
       type: "select",
-      required: true,
-      defaultValue: "Interno",
+      required: false,
+      defaultValue: "",
       options: [
-        { value: "Interno", label: "Interno" },
+        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
         { value: "QA", label: "QA" },
         { value: "Suporte", label: "Suporte" }
       ]
@@ -282,12 +285,12 @@ export const formConfig: FormConfig = {
       id: "activity",
       label: "Activity",
       type: "select",
-      defaultValue: "Development",
+      defaultValue: "Develop",
       options: [
-        { value: "Development", label: "Development" },
-        { value: "Testing", label: "Testing" },
-        { value: "Design", label: "Design" },
-        { value: "Analysis", label: "Analysis" }
+        { value: "Develop", label: "Develop" },
+        { value: "Production", label: "Production" },
+        { value: "Staging", label: "Staging" },
+        { value: "Test", label: "Test" }
       ]
     },
     {
@@ -328,3 +331,5 @@ export function createDefaultValues() {
     }
   );
 }
+
+

@@ -8,9 +8,11 @@ import { createDefaultValues, formConfig } from "./config/formOptions.js";
 import {
   createAzureWorkItem,
   getAzureEpicChildren,
+  getAzureFieldMap,
   getAzureRelationTypes,
   getAzureTrackingData,
-  getAzureWorkItemSummary
+  getAzureWorkItemSummary,
+  validateAzurePat
 } from "./services/azureDevops.js";
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -27,7 +29,7 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 app.get("/api/health", (_request: Request, response: Response) => {
   response.json({ ok: true });
@@ -40,6 +42,24 @@ app.get("/api/form-config", (_request: Request, response: Response) => {
   });
 });
 
+app.get("/api/azure-auth-check", async (_request: Request, response: Response) => {
+  try {
+    const result = await validateAzurePat();
+    response.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    response.status(400).json({ error: message });
+  }
+});
+app.get("/api/azure-field-map", async (_request: Request, response: Response) => {
+  try {
+    const fields = await getAzureFieldMap();
+    response.json(fields);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    response.status(400).json({ error: message });
+  }
+});
 app.get("/api/azure-sync", async (_request: Request, response: Response) => {
   try {
     const [tracking, relationTypes] = await Promise.all([
@@ -108,5 +128,10 @@ if (shouldServeClient) {
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
+
+
+
+
+
 
 

@@ -1,4 +1,4 @@
-ï»¿import { z } from "zod";
+import { z } from "zod";
 
 export const workItemPayloadSchema = z.object({
   kind: z.enum(["bug", "issue", "task"]),
@@ -7,7 +7,7 @@ export const workItemPayloadSchema = z.object({
   parentId: z.string().trim().optional().default(""),
   titleTag: z.string().trim().min(1),
   titleText: z.string().trim().min(1),
-  madeBy: z.string().trim().min(1),
+  madeBy: z.string().trim().optional().default(""),
   description: z.string().trim().min(1),
   acceptanceCriteria: z.string().trim().optional().default(""),
   priority: z.string().trim().optional().default(""),
@@ -29,7 +29,8 @@ export const workItemPayloadSchema = z.object({
     z.object({
       name: z.string(),
       type: z.string(),
-      size: z.number().nonnegative()
+      size: z.number().nonnegative(),
+      contentBase64: z.string().optional().default("")
     })
   ).optional().default([])
 });
@@ -63,6 +64,7 @@ type AzureConfig = {
     iterationPath?: string;
     tags?: string;
   };
+  enableAttachments: boolean;
 };
 
 type AzurePatchOperation = {
@@ -158,7 +160,7 @@ function getAzureConfig(): AzureConfig {
       description: getOptionalEnv("AZDO_FIELD_DESCRIPTION") ?? "System.Description",
       acceptanceCriteria: getOptionalEnv("AZDO_FIELD_ACCEPTANCE_CRITERIA"),
       reproSteps: getOptionalEnv("AZDO_FIELD_REPRO_STEPS"),
-      requesterName: getOptionalEnv("AZDO_FIELD_REQUESTER_NAME"),
+      requesterName: getOptionalEnv("AZDO_FIELD_SEND_BY") ?? getOptionalEnv("AZDO_FIELD_REQUESTER_NAME"),
       madeBy: getOptionalEnv("AZDO_FIELD_MADE_BY"),
       priority: getOptionalEnv("AZDO_FIELD_PRIORITY"),
       severity: getOptionalEnv("AZDO_FIELD_SEVERITY"),
@@ -174,7 +176,8 @@ function getAzureConfig(): AzureConfig {
       areaPath: getOptionalEnv("AZDO_DEFAULT_AREA_PATH"),
       iterationPath: getOptionalEnv("AZDO_DEFAULT_ITERATION_PATH"),
       tags: getOptionalEnv("AZDO_DEFAULT_TAGS")
-    }
+    },
+    enableAttachments: (getOptionalEnv("AZDO_ENABLE_ATTACHMENTS") ?? "true").toLowerCase() !== "false"
   };
 }
 
@@ -222,6 +225,95 @@ async function azureOrgRequest<T>(path: string) {
   return JSON.parse(responseText) as T;
 }
 
+async function uploadAzureAttachment(file: { name: string; type: string; contentBase64?: string }) {
+  if (!file.contentBase64) {
+    throw new Error(`Arquivo ${file.name} sem conteudo para upload`);
+  }
+
+  const azure = getAzureConfig();
+  const basicToken = Buffer.from(`:${azure.pat}`).toString("base64");
+  const url = `https://dev.azure.com/${azure.organization}/${azure.project}/_apis/wit/attachments?fileName=${encodeURIComponent(file.name)}&api-version=7.1`;
+
+  const binaryContent = Buffer.from(file.contentBase64, "base64");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basicToken}`,
+      "Content-Type": "application/octet-stream",
+      Accept: "application/json"
+    },
+    body: binaryContent
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Falha ao subir anexo ${file.name} (${response.status}): ${responseText}`);
+  }
+
+  const data = JSON.parse(responseText) as { url: string };
+
+  if (!data.url) {
+    throw new Error(`Azure nao retornou URL do anexo ${file.name}`);
+  }
+
+  return data.url;
+}
+
+async function attachFileToWorkItem(workItemId: number, fileName: string, attachmentUrl: string) {
+  await azureRequest<AzureWorkItem>(
+    `/_apis/wit/workitems/${workItemId}?api-version=7.1`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json-patch+json"
+      },
+      body: JSON.stringify([
+        {
+          op: "add",
+          path: "/relations/-",
+          value: {
+            rel: "AttachedFile",
+            url: attachmentUrl,
+            attributes: {
+              comment: `Anexo enviado via BuGO: ${fileName}`
+            }
+          }
+        }
+      ])
+    }
+  );
+}
+type UploadedAttachment = {
+  name: string;
+  type: string;
+  url: string;
+};
+
+async function attachPayloadFilesToWorkItem(workItemId: number, payload: WorkItemPayload, azure: AzureConfig) {
+  const uploaded: UploadedAttachment[] = [];
+
+  if (!azure.enableAttachments || payload.attachments.length === 0) {
+    return uploaded;
+  }
+
+  for (const file of payload.attachments) {
+    if (!file.contentBase64) {
+      continue;
+    }
+
+    const attachmentUrl = await uploadAzureAttachment(file);
+    await attachFileToWorkItem(workItemId, file.name, attachmentUrl);
+    uploaded.push({
+      name: file.name,
+      type: file.type,
+      url: attachmentUrl
+    });
+  }
+
+  return uploaded;
+}
 function addOperation(operations: AzurePatchOperation[], fieldName: string | undefined, value: string | undefined) {
   if (!fieldName || !value) {
     return;
@@ -240,14 +332,14 @@ function createTitle(payload: WorkItemPayload) {
 
 function formatBddStep(step: string) {
   const trimmed = step.trim();
-  const match = trimmed.match(/^(quando|e|ent[aÃ£]o)\b\s*(.*)$/i);
+  const match = trimmed.match(/^(quando|e|ent[aã]o)\b\s*(.*)$/i);
 
   if (!match) {
     return trimmed;
   }
 
   const keywordRaw = match[1].toLowerCase();
-  const keyword = keywordRaw.startsWith("ent") ? "EntÃ£o" : keywordRaw === "e" ? "E" : "Quando";
+  const keyword = keywordRaw.startsWith("ent") ? "Então" : keywordRaw === "e" ? "E" : "Quando";
   const tail = match[2]?.trim();
 
   return `**${keyword}**${tail ? ` ${tail}` : ""}`;
@@ -274,12 +366,6 @@ function createDescription(payload: WorkItemPayload) {
   const stepsText = payload.steps.length > 0
     ? ["Steps:", ...payload.steps.map((step, index) => `${index + 1}. ${formatBddStep(step)}`)].join("\n")
     : undefined;
-  const videoNames = payload.attachments
-    .filter((file) => file.type.startsWith("video/"))
-    .map((file) => file.name);
-  const attachmentsText = payload.attachments.length > 0
-    ? ["Arquivos selecionados:", ...payload.attachments.map((file) => `- ${file.name} (${file.type || "file"})`)].join("\n")
-    : undefined;
 
   const sections = [
     payload.description ? `Description:\n${payload.description}` : undefined,
@@ -287,7 +373,7 @@ function createDescription(payload: WorkItemPayload) {
     `Feature ID: ${payload.featureId}`,
     payload.parentId ? `Parent ID: ${payload.parentId}` : undefined,
     `Nome: ${payload.requesterName}`,
-    `Made By: ${payload.madeBy}`,
+    payload.madeBy ? `Made By: ${payload.madeBy}` : undefined,
     payload.priority ? `Priority: ${payload.priority}` : undefined,
     payload.severity ? `Severity: ${payload.severity}` : undefined,
     payload.activity ? `Activity: ${payload.activity}` : undefined,
@@ -295,12 +381,72 @@ function createDescription(payload: WorkItemPayload) {
     payload.valueArea ? `Value Area: ${payload.valueArea}` : undefined,
     systemInfoText ? `System Info:\n${systemInfoText}` : undefined,
     stepsText,
-    videoNames.length > 0 ? `Segue ${videoNames.join(", ")}` : undefined,
-    payload.acceptanceCriteria ? `Acceptance Criteria:\n${payload.acceptanceCriteria}` : undefined,
-    attachmentsText
+    payload.acceptanceCriteria ? `Acceptance Criteria:\n${payload.acceptanceCriteria}` : undefined
   ].filter(Boolean);
 
   return sections.join("\n\n");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildDescriptionWithAttachments(baseDescription: string, uploadedAttachments: UploadedAttachment[]) {
+  if (uploadedAttachments.length === 0) {
+    return baseDescription;
+  }
+
+  const htmlParts: string[] = [];
+
+  const escapedBase = escapeHtml(baseDescription).replaceAll("\n", "<br>");
+  htmlParts.push(`<p>${escapedBase}</p>`);
+  htmlParts.push("<hr>");
+  htmlParts.push("<p><strong>-- Anexos --</strong></p>");
+
+  for (const attachment of uploadedAttachments) {
+    if (attachment.type.startsWith("image/")) {
+      htmlParts.push(`<p><a href="${attachment.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(attachment.name)}</a></p>`);
+      htmlParts.push(`<p><img src="${attachment.url}" alt="${escapeHtml(attachment.name)}" style="max-width:100%;height:auto;" /></p>`);
+      continue;
+    }
+
+    if (attachment.type.startsWith("video/")) {
+      htmlParts.push(`<p><a href="${attachment.url}" target="_blank" rel="noopener noreferrer">Segue video ${escapeHtml(attachment.name)}</a></p>`);
+      continue;
+    }
+
+    htmlParts.push(`<p><a href="${attachment.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(attachment.name)}</a></p>`);
+  }
+
+  return htmlParts.join("");
+}
+
+async function updateDescriptionWithAttachmentLinks(
+  workItemId: number,
+  descriptionField: string,
+  descriptionWithAttachments: string
+) {
+  await azureRequest<AzureWorkItem>(
+    `/_apis/wit/workitems/${workItemId}?api-version=7.1`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json-patch+json"
+      },
+      body: JSON.stringify([
+        {
+          op: "add",
+          path: `/fields/${descriptionField}`,
+          value: descriptionWithAttachments
+        }
+      ])
+    }
+  );
 }
 
 function getParentIdFromRelations(workItem: AzureWorkItem) {
@@ -517,7 +663,7 @@ export async function createAzureWorkItem(rawPayload: unknown) {
     throw new Error(`Azure DevOps request failed (${response.status}): ${responseText}`);
   }
 
-  return JSON.parse(responseText) as {
+  const createdWorkItem = JSON.parse(responseText) as {
     id: number;
     url: string;
     _links?: {
@@ -527,6 +673,15 @@ export async function createAzureWorkItem(rawPayload: unknown) {
     };
     fields?: Record<string, unknown>;
   };
+
+  const uploadedAttachments = await attachPayloadFilesToWorkItem(createdWorkItem.id, payload, azure);
+
+  if (uploadedAttachments.length > 0) {
+    const descriptionWithAttachments = buildDescriptionWithAttachments(description, uploadedAttachments);
+    await updateDescriptionWithAttachmentLinks(createdWorkItem.id, azure.fields.description, descriptionWithAttachments);
+  }
+
+  return createdWorkItem;
 }
 
 export async function getAzureRelationTypes() {
@@ -534,5 +689,57 @@ export async function getAzureRelationTypes() {
     "/_apis/wit/workitemrelationtypes?api-version=7.1"
   );
 }
+
+
+
+export async function getAzureFieldMap() {
+  const azure = getAzureConfig();
+
+  const bugTypeName = azure.workItemTypes.bug;
+  const pbiTypeName = azure.workItemTypes.issue;
+
+  const [bugFieldsResponse, pbiFieldsResponse] = await Promise.all([
+    azureRequest<{ value: Array<{ name: string; referenceName: string; type?: string; isIdentity?: boolean; readOnly?: boolean }> }>(
+      `/_apis/wit/workitemtypes/${encodeURIComponent(bugTypeName)}/fields?api-version=7.1`
+    ),
+    azureRequest<{ value: Array<{ name: string; referenceName: string; type?: string; isIdentity?: boolean; readOnly?: boolean }> }>(
+      `/_apis/wit/workitemtypes/${encodeURIComponent(pbiTypeName)}/fields?api-version=7.1`
+    )
+  ]);
+
+  return {
+    project: azure.project,
+    workItemTypes: {
+      bug: bugTypeName,
+      pbi: pbiTypeName
+    },
+    configuredFieldMap: azure.fields,
+    bugFields: bugFieldsResponse.value,
+    pbiFields: pbiFieldsResponse.value
+  };
+}
+export async function validateAzurePat() {
+  const azure = getAzureConfig();
+
+  await azureRequest<{ value: Array<{ name: string }> }>(
+    "/_apis/wit/workitemtypes?api-version=7.1"
+  );
+
+  return {
+    ok: true,
+    organization: azure.organization,
+    project: azure.project,
+    checkedAt: new Date().toISOString()
+  };
+}
+
+
+
+
+
+
+
+
+
 
 
