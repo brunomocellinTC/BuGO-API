@@ -1,4 +1,4 @@
-import { z } from "zod";
+ï»¿import { z } from "zod";
 
 export const workItemPayloadSchema = z.object({
   kind: z.enum(["bug", "issue", "task"]),
@@ -47,6 +47,7 @@ type AzureConfig = {
     description: string;
     acceptanceCriteria?: string;
     reproSteps?: string;
+    steps?: string;
     requesterName?: string;
     madeBy?: string;
     priority?: string;
@@ -160,6 +161,7 @@ function getAzureConfig(): AzureConfig {
       description: getOptionalEnv("AZDO_FIELD_DESCRIPTION") ?? "System.Description",
       acceptanceCriteria: getOptionalEnv("AZDO_FIELD_ACCEPTANCE_CRITERIA"),
       reproSteps: getOptionalEnv("AZDO_FIELD_REPRO_STEPS"),
+      steps: getOptionalEnv("AZDO_FIELD_STEPS") ?? "Microsoft.VSTS.TCM.Steps",
       requesterName: getOptionalEnv("AZDO_FIELD_SEND_BY") ?? getOptionalEnv("AZDO_FIELD_REQUESTER_NAME"),
       madeBy: getOptionalEnv("AZDO_FIELD_MADE_BY"),
       priority: getOptionalEnv("AZDO_FIELD_PRIORITY"),
@@ -170,7 +172,7 @@ function getAzureConfig(): AzureConfig {
       systemInfo: getOptionalEnv("AZDO_FIELD_SYSTEM_INFO"),
       areaPath: "System.AreaPath",
       iterationPath: "System.IterationPath",
-      tags: "System.Tags"
+      tags: getOptionalEnv("AZDO_FIELD_TAGS")
     },
     defaults: {
       areaPath: getOptionalEnv("AZDO_DEFAULT_AREA_PATH"),
@@ -327,22 +329,30 @@ function addOperation(operations: AzurePatchOperation[], fieldName: string | und
 }
 
 function createTitle(payload: WorkItemPayload) {
-  return `[${payload.titleTag}] ${payload.titleText}`;
+  const normalizedTags = payload.titleTag
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => `[${tag}]`)
+    .join("");
+
+  return `${normalizedTags}${normalizedTags ? " " : ""}${payload.titleText.trim()}`;
 }
 
 function formatBddStep(step: string) {
   const trimmed = step.trim();
-  const match = trimmed.match(/^(quando|e|ent[aã]o)\b\s*(.*)$/i);
+  const normalized = trimmed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const match = normalized.match(/^(quando|e|entao)\b\s*(.*)$/i);
 
   if (!match) {
     return trimmed;
   }
 
   const keywordRaw = match[1].toLowerCase();
-  const keyword = keywordRaw.startsWith("ent") ? "Então" : keywordRaw === "e" ? "E" : "Quando";
-  const tail = match[2]?.trim();
+  const keyword = keywordRaw.startsWith("ent") ? "EntÃ£o" : keywordRaw === "e" ? "E" : "Quando";
+  const tail = match[2]?.trim() ?? "";
 
-  return `**${keyword}**${tail ? ` ${tail}` : ""}`;
+  return `${keyword}${tail ? ` ${tail}` : ""}`;
 }
 
 function createSystemInfoText(payload: WorkItemPayload) {
@@ -362,29 +372,21 @@ function createSystemInfoText(payload: WorkItemPayload) {
 }
 
 function createDescription(payload: WorkItemPayload) {
-  const systemInfoText = createSystemInfoText(payload);
-  const stepsText = payload.steps.length > 0
-    ? ["Steps:", ...payload.steps.map((step, index) => `${index + 1}. ${formatBddStep(step)}`)].join("\n")
-    : undefined;
+  return payload.description.trim();
+}
 
-  const sections = [
-    payload.description ? `Description:\n${payload.description}` : undefined,
-    `Epic ID: ${payload.epicId}`,
-    `Feature ID: ${payload.featureId}`,
-    payload.parentId ? `Parent ID: ${payload.parentId}` : undefined,
-    `Nome: ${payload.requesterName}`,
-    payload.madeBy ? `Made By: ${payload.madeBy}` : undefined,
-    payload.priority ? `Priority: ${payload.priority}` : undefined,
-    payload.severity ? `Severity: ${payload.severity}` : undefined,
-    payload.activity ? `Activity: ${payload.activity}` : undefined,
-    payload.processPhase ? `Process Phase: ${payload.processPhase}` : undefined,
-    payload.valueArea ? `Value Area: ${payload.valueArea}` : undefined,
-    systemInfoText ? `System Info:\n${systemInfoText}` : undefined,
-    stepsText,
-    payload.acceptanceCriteria ? `Acceptance Criteria:\n${payload.acceptanceCriteria}` : undefined
-  ].filter(Boolean);
+function createReproStepsHtml(payload: WorkItemPayload) {
+  const steps = payload.steps
+    .map((step) => step.trim())
+    .filter(Boolean)
+    .map((step, index) => `${index + 1}. ${formatBddStep(step)}`);
 
-  return sections.join("\n\n");
+  return steps.join("<br/>");
+}
+
+function createSystemInfoHtml(payload: WorkItemPayload) {
+  const systemInfoText = createSystemInfoText(payload).trim();
+  return systemInfoText ? escapeHtml(systemInfoText).replaceAll("\n", "<br/>") : "";
 }
 
 function escapeHtml(value: string) {
@@ -410,8 +412,7 @@ function buildDescriptionWithAttachments(baseDescription: string, uploadedAttach
 
   for (const attachment of uploadedAttachments) {
     if (attachment.type.startsWith("image/")) {
-      htmlParts.push(`<p><a href="${attachment.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(attachment.name)}</a></p>`);
-      htmlParts.push(`<p><img src="${attachment.url}" alt="${escapeHtml(attachment.name)}" style="max-width:100%;height:auto;" /></p>`);
+     htmlParts.push(`<p><img src="${attachment.url}" alt="${escapeHtml(attachment.name)}" style="max-width:100%;height:auto;" /></p>`);
       continue;
     }
 
@@ -609,13 +610,17 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   const operations: AzurePatchOperation[] = [];
   const title = createTitle(payload);
   const description = createDescription(payload);
-  const systemInfoText = createSystemInfoText(payload);
-  const stepsText = payload.steps.map((step, index) => `${index + 1}. ${formatBddStep(step)}`).join("\n");
+  const systemInfoText = createSystemInfoHtml(payload);
+  const stepsText = createReproStepsHtml(payload);
 
   addOperation(operations, azure.fields.title, title);
   addOperation(operations, azure.fields.description, description);
   addOperation(operations, azure.fields.acceptanceCriteria, payload.acceptanceCriteria);
   addOperation(operations, azure.fields.reproSteps, stepsText);
+
+  if (azure.fields.steps && azure.fields.steps !== azure.fields.reproSteps) {
+    addOperation(operations, azure.fields.steps, stepsText);
+  }
   addOperation(operations, azure.fields.requesterName, payload.requesterName);
   addOperation(operations, azure.fields.madeBy, payload.madeBy);
   addOperation(operations, azure.fields.priority, payload.priority);
@@ -626,7 +631,6 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   addOperation(operations, azure.fields.systemInfo, systemInfoText);
   addOperation(operations, azure.fields.areaPath, azure.defaults.areaPath);
   addOperation(operations, azure.fields.iterationPath, azure.defaults.iterationPath);
-  addOperation(operations, azure.fields.tags, azure.defaults.tags);
 
   const hierarchyParentId = payload.kind === "task" ? payload.parentId : payload.featureId;
 
@@ -732,6 +736,12 @@ export async function validateAzurePat() {
     checkedAt: new Date().toISOString()
   };
 }
+
+
+
+
+
+
 
 
 
