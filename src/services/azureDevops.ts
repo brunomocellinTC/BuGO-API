@@ -612,10 +612,16 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   const description = createDescription(payload);
   const systemInfoText = createSystemInfoHtml(payload);
   const stepsText = createReproStepsHtml(payload);
+  const acceptanceCriteriaText = payload.acceptanceCriteria
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*\d+\.\s*/, "").trim())
+    .filter(Boolean)
+    .map((line, index) => `${index + 1}. ${line}`)
+    .join("<br/>");
 
   addOperation(operations, azure.fields.title, title);
   addOperation(operations, azure.fields.description, description);
-  addOperation(operations, azure.fields.acceptanceCriteria, payload.acceptanceCriteria);
+  addOperation(operations, azure.fields.acceptanceCriteria, acceptanceCriteriaText);
   addOperation(operations, azure.fields.reproSteps, stepsText);
 
   if (azure.fields.steps && azure.fields.steps !== azure.fields.reproSteps) {
@@ -736,6 +742,7 @@ export async function validateAzurePat() {
     checkedAt: new Date().toISOString()
   };
 }
+
 
 
 
