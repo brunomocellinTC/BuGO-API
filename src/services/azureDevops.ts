@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const workItemPayloadSchema = z.object({
   kind: z.enum(["bug", "issue", "task"]),
@@ -16,6 +16,7 @@ export const workItemPayloadSchema = z.object({
   processPhase: z.string().trim().optional().default(""),
   valueArea: z.string().trim().optional().default(""),
   requesterName: z.string().trim().min(1),
+  areaPath: z.string().trim().optional().default(""),
   steps: z.array(z.string().trim()).optional().default([]),
   systemInfo: z.array(
     z.object({
@@ -132,6 +133,66 @@ export type AzureWorkItemSummary = {
   parentId?: number;
 };
 
+type AzureAreaNode = {
+  name: string;
+  path?: string;
+  children?: AzureAreaNode[];
+};
+
+function normalizeAreaPath(rawAreaPath: string | undefined, projectName: string) {
+  const raw = (rawAreaPath ?? "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  const normalizedProject = projectName.trim();
+  const normalized = raw
+    .replace(/[\\/]+/g, "\\")
+    .replace(/^\\+/, "")
+    .replace(/\\+$/, "");
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === normalizedProject || normalized.startsWith(`${normalizedProject}\\`)) {
+    return normalized;
+  }
+
+  return `${normalizedProject}\\${normalized}`;
+}
+
+function stripAreaSegment(pathValue: string) {
+  const segmentToStrip = (process.env.AZDO_AREA_PATH_STRIP_SEGMENT ?? "").trim();
+
+  if (!segmentToStrip) {
+    return pathValue;
+  }
+
+  const parts = pathValue.split("\\");
+  const filtered = parts.filter((part) => part.trim().toLowerCase() !== segmentToStrip.toLowerCase());
+
+  return filtered.join("\\");
+}
+
+function resolveAreaPath(
+  rawAreaPath: string | undefined,
+  projectName: string,
+  options: Array<{ value: string; label: string }>
+) {
+  const normalizedInput = stripAreaSegment(normalizeAreaPath(rawAreaPath, projectName));
+
+  if (!normalizedInput) {
+    return "";
+  }
+
+  const normalizedOptions = options.map((option) => stripAreaSegment(normalizeAreaPath(option.value, projectName)));
+  const exact = normalizedOptions.find((value) => value.toLowerCase() === normalizedInput.toLowerCase());
+
+  return exact ?? "";
+}
+
 function getRequiredEnv(name: string) {
   const value = process.env[name]?.trim();
 
@@ -170,8 +231,8 @@ function getAzureConfig(): AzureConfig {
       processPhase: getOptionalEnv("AZDO_FIELD_PROCESS_PHASE"),
       valueArea: getOptionalEnv("AZDO_FIELD_VALUE_AREA"),
       systemInfo: getOptionalEnv("AZDO_FIELD_SYSTEM_INFO"),
-      areaPath: "System.AreaPath",
-      iterationPath: "System.IterationPath",
+      areaPath: getOptionalEnv("AZDO_FIELD_AREA_PATH") ?? "System.AreaPath",
+      iterationPath: getOptionalEnv("AZDO_FIELD_ITERATION_PATH") ?? "System.IterationPath",
       tags: getOptionalEnv("AZDO_FIELD_TAGS")
     },
     defaults: {
@@ -349,7 +410,7 @@ function formatBddStep(step: string) {
   }
 
   const keywordRaw = match[1].toLowerCase();
-  const keyword = keywordRaw.startsWith("ent") ? "Então" : keywordRaw === "e" ? "E" : "Quando";
+  const keyword = keywordRaw.startsWith("ent") ? "Ent�o" : keywordRaw === "e" ? "E" : "Quando";
   const tail = match[2]?.trim() ?? "";
 
   return `${keyword}${tail ? ` ${tail}` : ""}`;
@@ -608,6 +669,13 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   const payload = workItemPayloadSchema.parse(rawPayload);
   const azure = getAzureConfig();
   const operations: AzurePatchOperation[] = [];
+  const areaOptions = await getAzureAreaOptions();
+  const resolvedAreaPath = resolveAreaPath(payload.areaPath || azure.defaults.areaPath, azure.project, areaOptions);
+
+  if (!resolvedAreaPath) {
+    const attemptedArea = stripAreaSegment(normalizeAreaPath(payload.areaPath || azure.defaults.areaPath, azure.project));
+    throw new Error(`Area invalida para o projeto ${azure.project}: ${attemptedArea || "(vazia)"}. Use exatamente um value de /api/form-config.areaOptions.`);
+  }
   const title = createTitle(payload);
   const description = createDescription(payload);
   const systemInfoText = createSystemInfoHtml(payload);
@@ -635,7 +703,7 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   addOperation(operations, azure.fields.processPhase, payload.processPhase);
   addOperation(operations, azure.fields.valueArea, payload.valueArea);
   addOperation(operations, azure.fields.systemInfo, systemInfoText);
-  addOperation(operations, azure.fields.areaPath, azure.defaults.areaPath);
+  addOperation(operations, azure.fields.areaPath, resolvedAreaPath);
   addOperation(operations, azure.fields.iterationPath, azure.defaults.iterationPath);
 
   const hierarchyParentId = payload.kind === "task" ? payload.parentId : payload.featureId;
@@ -670,7 +738,7 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   const responseText = await response.text();
 
   if (!response.ok) {
-    throw new Error(`Azure DevOps request failed (${response.status}): ${responseText}`);
+    throw new Error(`Azure DevOps request failed (${response.status}) [areaPath=${resolvedAreaPath} project=${azure.project}]: ${responseText}`);
   }
 
   const createdWorkItem = JSON.parse(responseText) as {
@@ -701,6 +769,39 @@ export async function getAzureRelationTypes() {
 }
 
 
+
+export async function getAzureAreaOptions() {
+  const root = await azureRequest<AzureAreaNode>(
+    "/_apis/wit/classificationnodes/areas?$depth=2&api-version=7.1"
+  );
+
+  const options: Array<{ value: string; label: string }> = [];
+
+  const walk = (node: AzureAreaNode) => {
+    const normalizedPath = normalizeAreaPath(node.path ?? `${root.name}\\${node.name}`, root.name);
+
+    if (normalizedPath && normalizedPath !== root.name) {
+      options.push({
+        value: normalizedPath,
+        label: normalizedPath.split("\\").pop() ?? node.name
+      });
+    }
+
+    for (const child of node.children ?? []) {
+      walk(child);
+    }
+  };
+
+  for (const child of root.children ?? []) {
+    walk(child);
+  }
+
+  const deduped = Array.from(new Map(options.map((option) => [option.value.toLowerCase(), option])).values());
+
+  deduped.sort((left, right) => left.label.localeCompare(right.label));
+
+  return deduped;
+}
 
 export async function getAzureFieldMap() {
   const azure = getAzureConfig();
@@ -742,6 +843,13 @@ export async function validateAzurePat() {
     checkedAt: new Date().toISOString()
   };
 }
+
+
+
+
+
+
+
 
 
 
