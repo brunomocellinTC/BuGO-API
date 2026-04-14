@@ -1,4 +1,4 @@
-import cors from "cors";
+﻿import cors from "cors";
 import dotenv from "dotenv";
 import express, { NextFunction, Request, Response } from "express";
 import path from "node:path";
@@ -12,6 +12,7 @@ import {
   getAzureRelationTypes,
   getAzureTrackingData,
   getAzureWorkItemSummary,
+  getAzureAreaOptions,
   validateAzurePat
 } from "./services/azureDevops.js";
 
@@ -35,11 +36,22 @@ app.get("/api/health", (_request: Request, response: Response) => {
   response.json({ ok: true });
 });
 
-app.get("/api/form-config", (_request: Request, response: Response) => {
-  response.json({
-    ...formConfig,
-    defaults: createDefaultValues()
-  });
+app.get("/api/form-config", async (_request: Request, response: Response) => {
+  try {
+    const areaOptions = await getAzureAreaOptions();
+
+    response.json({
+      ...formConfig,
+      areaOptions,
+      defaults: {
+        ...createDefaultValues(),
+        areaPath: areaOptions[0]?.value ?? ""
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    response.status(400).json({ error: message });
+  }
 });
 
 app.get("/api/azure-auth-check", async (_request: Request, response: Response) => {
@@ -128,6 +140,10 @@ if (shouldServeClient) {
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
+
+
+
+
 
 
 
