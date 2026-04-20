@@ -7,7 +7,7 @@ export const workItemPayloadSchema = z.object({
   parentId: z.string().trim().optional().default(""),
   titleTag: z.string().trim().min(1),
   titleText: z.string().trim().min(1),
-  madeBy: z.string().trim().optional().default(""),
+  sendBy: z.string().trim().optional().default(""),
   description: z.string().trim().min(1),
   acceptanceCriteria: z.string().trim().optional().default(""),
   priority: z.string().trim().optional().default(""),
@@ -15,7 +15,6 @@ export const workItemPayloadSchema = z.object({
   activity: z.string().trim().optional().default(""),
   processPhase: z.string().trim().optional().default(""),
   valueArea: z.string().trim().optional().default(""),
-  requesterName: z.string().trim().min(1),
   areaPath: z.string().trim().optional().default(""),
   steps: z.array(z.string().trim()).optional().default([]),
   systemInfo: z.array(
@@ -49,8 +48,7 @@ type AzureConfig = {
     acceptanceCriteria?: string;
     reproSteps?: string;
     steps?: string;
-    requesterName?: string;
-    madeBy?: string;
+    sendBy?: string;
     priority?: string;
     severity?: string;
     activity?: string;
@@ -223,8 +221,7 @@ function getAzureConfig(): AzureConfig {
       acceptanceCriteria: getOptionalEnv("AZDO_FIELD_ACCEPTANCE_CRITERIA"),
       reproSteps: getOptionalEnv("AZDO_FIELD_REPRO_STEPS"),
       steps: getOptionalEnv("AZDO_FIELD_STEPS") ?? "Microsoft.VSTS.TCM.Steps",
-      requesterName: getOptionalEnv("AZDO_FIELD_SEND_BY") ?? getOptionalEnv("AZDO_FIELD_REQUESTER_NAME"),
-      madeBy: getOptionalEnv("AZDO_FIELD_MADE_BY"),
+      sendBy: getOptionalEnv("AZDO_FIELD_SEND_BY") ?? getOptionalEnv("AZDO_FIELD_REQUESTER_NAME"),
       priority: getOptionalEnv("AZDO_FIELD_PRIORITY"),
       severity: getOptionalEnv("AZDO_FIELD_SEVERITY"),
       activity: getOptionalEnv("AZDO_FIELD_ACTIVITY"),
@@ -695,8 +692,7 @@ export async function createAzureWorkItem(rawPayload: unknown) {
   if (azure.fields.steps && azure.fields.steps !== azure.fields.reproSteps) {
     addOperation(operations, azure.fields.steps, stepsText);
   }
-  addOperation(operations, azure.fields.requesterName, payload.requesterName);
-  addOperation(operations, azure.fields.madeBy, payload.madeBy);
+  addOperation(operations, azure.fields.sendBy, payload.sendBy);
   addOperation(operations, azure.fields.priority, payload.priority);
   addOperation(operations, azure.fields.severity, payload.severity);
   addOperation(operations, azure.fields.activity, payload.activity);

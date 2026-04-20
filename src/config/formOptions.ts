@@ -35,6 +35,19 @@ export type FormConfig = {
   taskFields: FormFieldConfig[];
 };
 
+const peopleOptions: FieldOption[] = [
+  { value: "Bruno Martins da Cruz", label: "Bruno Martins da Cruz" },
+  { value: "Bruno Mocellin", label: "Bruno Mocellin" },
+  { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
+  { value: "Lilian Beatriz Jochims", label: "Lilian Beatriz Jochims" },
+  { value: "Lucas Ricardo Graeff", label: "Lucas Ricardo Graeff" },
+  { value: "Matheus Montoanelli de Souza", label: "Matheus Montoanelli de Souza" },
+  { value: "Matheus Winck Maisonette Duarte", label: "Matheus Winck Maisonette Duarte" },
+  { value: "Rafael Geroldi Teixeira", label: "Rafael Geroldi Teixeira" },
+  { value: "Wellington Antunes Voltz", label: "Wellington Antunes Voltz" },
+  { value: "William Deivid Pires", label: "William Deivid Pires" }
+];
+
 export const formConfig: FormConfig = {
   title: "BuGO",
   description: "Abra Bugs, Issues e Tasks com destino sincronizado no Azure DevOps.",
@@ -62,12 +75,8 @@ export const formConfig: FormConfig = {
   titleTags: [
     { value: "", label: "" },
   ],
-  people: [
-    { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-    { value: "Willism Demi Pres", label: "Willism Demi Pres" },
-    { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
-    { value: "QA Team", label: "QA Team" }
-  ],
+
+  people: peopleOptions,
   browsers: [
     { value: "Chrome", label: "Chrome" },
     { value: "Edge", label: "Edge" },
@@ -87,16 +96,10 @@ export const formConfig: FormConfig = {
   ],
   bugFields: [
     {
-      id: "madeBy",
-      label: "Made By",
+      id: "sendBy",
+      label: "Enviado por",
       type: "select",
-      required: false,
-      defaultValue: "",
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "QA", label: "QA" },
-        { value: "Suporte", label: "Suporte" }
-      ]
+      options: peopleOptions
     },
     {
       id: "description",
@@ -166,18 +169,6 @@ export const formConfig: FormConfig = {
       ]
     },
     {
-      id: "requesterName",
-      label: "Nome",
-      type: "select",
-      required: true,
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "Willism Demi Pres", label: "Willism Demi Pres" },
-        { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
-        { value: "QA Team", label: "QA Team" }
-      ]
-    },
-    {
       id: "media",
       label: "Anexos, imagens e videos",
       type: "media"
@@ -185,16 +176,10 @@ export const formConfig: FormConfig = {
   ],
   issueFields: [
     {
-      id: "madeBy",
-      label: "Made By",
+      id: "sendBy",
+      label: "Enviado por",
       type: "select",
-      required: false,
-      defaultValue: "",
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "QA", label: "QA" },
-        { value: "Suporte", label: "Suporte" }
-      ]
+      options: peopleOptions
     },
     {
       id: "description",
@@ -232,18 +217,6 @@ export const formConfig: FormConfig = {
       ]
     },
     {
-      id: "requesterName",
-      label: "Nome",
-      type: "select",
-      required: true,
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "Willism Demi Pres", label: "Willism Demi Pres" },
-        { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
-        { value: "QA Team", label: "QA Team" }
-      ]
-    },
-    {
       id: "media",
       label: "Anexos, imagens e videos",
       type: "media"
@@ -251,16 +224,10 @@ export const formConfig: FormConfig = {
   ],
   taskFields: [
     {
-      id: "madeBy",
-      label: "Made By",
+      id: "sendBy",
+      label: "Enviado por",
       type: "select",
-      required: false,
-      defaultValue: "",
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "QA", label: "QA" },
-        { value: "Suporte", label: "Suporte" }
-      ]
+      options: peopleOptions
     },
     {
       id: "description",
@@ -294,18 +261,6 @@ export const formConfig: FormConfig = {
       ]
     },
     {
-      id: "requesterName",
-      label: "Nome",
-      type: "select",
-      required: true,
-      options: [
-        { value: "Bruno Mocellin", label: "Bruno Mocellin" },
-        { value: "Willism Demi Pres", label: "Willism Demi Pres" },
-        { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
-        { value: "QA Team", label: "QA Team" }
-      ]
-    },
-    {
       id: "media",
       label: "Anexos, imagens e videos",
       type: "media"
@@ -331,5 +286,3 @@ export function createDefaultValues() {
     }
   );
 }
-
-
