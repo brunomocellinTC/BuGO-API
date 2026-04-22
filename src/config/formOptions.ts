@@ -36,22 +36,32 @@ export type FormConfig = {
 };
 
 const peopleOptions: FieldOption[] = [
+  { value: "Ana Carolina Rodrigues da Rocha", label: "Ana Carolina Rodrigues da Rocha" },
   { value: "Bruno Martins da Cruz", label: "Bruno Martins da Cruz" },
   { value: "Bruno Mocellin", label: "Bruno Mocellin" },
+  { value: "Cristiano Baumgartner", label: "Cristiano Baumgartner" },
+  { value: "Diego Alves Vianna", label: "Diego Alves Vianna" },
+  { value: "Jaqueline Ferst", label: "Jaqueline Ferst" },
+  { value: "Joana Faller", label: "Joana Faller" },
   { value: "Joilson de Oliveira Telles", label: "Joilson de Oliveira Telles" },
+  { value: "Jonathan Klauck", label: "Jonathan Klauck" },
+  { value: "Keila Soeiro", label: "Keila Soeiro" },
   { value: "Lilian Beatriz Jochims", label: "Lilian Beatriz Jochims" },
+  { value: "Luana Kunrath", label: "Luana Kunrath" },
   { value: "Lucas Ricardo Graeff", label: "Lucas Ricardo Graeff" },
+  { value: "Mateus Arthur da Silva de Freitas", label: "Mateus Arthur da Silva de Freitas" },
   { value: "Matheus Montoanelli de Souza", label: "Matheus Montoanelli de Souza" },
   { value: "Matheus Winck Maisonette Duarte", label: "Matheus Winck Maisonette Duarte" },
   { value: "Rafael Geroldi Teixeira", label: "Rafael Geroldi Teixeira" },
+  { value: "Vinicius Coelho", label: "Vinicius Coelho" },
   { value: "Wellington Antunes Voltz", label: "Wellington Antunes Voltz" },
-  { value: "William Deivid Pires", label: "William Deivid Pires" }
+  { value: "William Deivid Pires", label: "William Deivid Pires" },
 ];
 
 export const formConfig: FormConfig = {
   title: "BuGO",
   description: "Abra Bugs, Issues e Tasks com destino sincronizado no Azure DevOps.",
-  basePath: "ti-testingcompany / Inovacao",
+  basePath: "ti-testingcompany/Inovação",
   kinds: [
     {
       id: "bug",
