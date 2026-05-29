@@ -407,7 +407,7 @@ function formatBddStep(step: string) {
   }
 
   const keywordRaw = match[1].toLowerCase();
-  const keyword = keywordRaw.startsWith("ent") ? "Ent�o" : keywordRaw === "e" ? "E" : "Quando";
+  const keyword = keywordRaw.startsWith("ent") ? "Então" : keywordRaw === "e" ? "E" : "Quando";
   const tail = match[2]?.trim() ?? "";
 
   return `${keyword}${tail ? ` ${tail}` : ""}`;
