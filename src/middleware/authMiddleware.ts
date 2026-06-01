@@ -1,4 +1,4 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
@@ -10,12 +10,13 @@ export interface AuthRequest extends Request {
   };
 }
 
-export function authMiddleware(req: any, res: Response, next: NextFunction) {
+export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const token = authHeader?.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ error: "Token não fornecido" });
+    res.status(401).json({ error: "Token não fornecido" });
+    return;
   }
 
   try {
@@ -26,14 +27,15 @@ export function authMiddleware(req: any, res: Response, next: NextFunction) {
     const emailDomain = decoded.email?.split("@")[1];
     
     if (!allowedDomains.includes(emailDomain)) {
-      return res.status(403).json({ 
+      res.status(403).json({ 
         error: `Domínio não autorizado. Seu domínio: ${emailDomain}` 
       });
+      return;
     }
 
-    req.user = decoded;
+    (req as AuthRequest).user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ error: "Token inválido ou expirado" });
+    res.status(401).json({ error: "Token inválido ou expirado" });
   }
 }
