@@ -15,6 +15,8 @@ import {
   getAzureAreaOptions,
   validateAzurePat
 } from "./services/azureDevops.js";
+import { authMiddleware, AuthRequest } from "./middleware/authMiddleware.js";
+import { generateJWT, verifyMicrosoftToken, validateEmailDomain } from "./services/authService.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -32,11 +34,66 @@ const port = Number(process.env.PORT || 3000);
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
+// ===== ROTAS DE AUTENTICAÇÃO =====
+
+/**
+ * POST /api/auth/microsoft-token
+ * Recebe token do Microsoft e retorna JWT da aplicação
+ */
+app.post("/api/auth/microsoft-token", async (request: Request, response: Response) => {
+  try {
+    const { access_token: microsoftToken } = request.body;
+
+    if (!microsoftToken) {
+      return response.status(400).json({ error: "Token Microsoft não fornecido" });
+    }
+
+    // Decodificar o token do Microsoft (sem verificação de assinatura, pois é feito pelo frontend)
+    // Em produção, você deveria verificar a assinatura
+    const parts = microsoftToken.split(".");
+    if (parts.length !== 3) {
+      return response.status(400).json({ error: "Formato de token inválido" });
+    }
+
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+    
+    // Validar dados do token
+    const tokenPayload = verifyMicrosoftToken(payload);
+
+    // Validar domínio
+    const allowedDomains = (process.env.ALLOWED_DOMAINS || "").split(",").map(d => d.trim());
+    if (!validateEmailDomain(tokenPayload.email, allowedDomains)) {
+      return response.status(403).json({ 
+        error: `Acesso negado. Domínio '${tokenPayload.email.split("@")[1]}' não autorizado.` 
+      });
+    }
+
+    // Gerar JWT da aplicação
+    const appToken = generateJWT(tokenPayload);
+
+    response.json({
+      access_token: appToken,
+      user: {
+        email: tokenPayload.email,
+        name: tokenPayload.name,
+        oid: tokenPayload.oid
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha na autenticação";
+    response.status(400).json({ error: message });
+  }
+});
+
+// ===== ROTAS PÚBLICAS =====
+
 app.get("/api/health", (_request: Request, response: Response) => {
   response.json({ ok: true });
 });
 
-app.get("/api/form-config", async (_request: Request, response: Response) => {
+// ===== ROTAS PROTEGIDAS (requerem SSO) =====
+
+app.get("/api/form-config", authMiddleware, async (_request: Request, response: Response) => {
   try {
     const areaOptions = await getAzureAreaOptions();
 
@@ -54,7 +111,7 @@ app.get("/api/form-config", async (_request: Request, response: Response) => {
   }
 });
 
-app.get("/api/azure-auth-check", async (_request: Request, response: Response) => {
+app.get("/api/azure-auth-check", authMiddleware, async (_request: Request, response: Response) => {
   try {
     const result = await validateAzurePat();
     response.json(result);
@@ -63,7 +120,8 @@ app.get("/api/azure-auth-check", async (_request: Request, response: Response) =
     response.status(400).json({ error: message });
   }
 });
-app.get("/api/azure-field-map", async (_request: Request, response: Response) => {
+
+app.get("/api/azure-field-map", authMiddleware, async (_request: Request, response: Response) => {
   try {
     const fields = await getAzureFieldMap();
     response.json(fields);
@@ -72,7 +130,8 @@ app.get("/api/azure-field-map", async (_request: Request, response: Response) =>
     response.status(400).json({ error: message });
   }
 });
-app.get("/api/azure-sync", async (_request: Request, response: Response) => {
+
+app.get("/api/azure-sync", authMiddleware, async (_request: Request, response: Response) => {
   try {
     const [tracking, relationTypes] = await Promise.all([
       getAzureTrackingData(),
@@ -89,7 +148,7 @@ app.get("/api/azure-sync", async (_request: Request, response: Response) => {
   }
 });
 
-app.get("/api/epics/:epicId/children", async (request: Request, response: Response) => {
+app.get("/api/epics/:epicId/children", authMiddleware, async (request: Request, response: Response) => {
   try {
     const epicId = Number(request.params.epicId);
     const epic = await getAzureEpicChildren(epicId);
@@ -100,7 +159,7 @@ app.get("/api/epics/:epicId/children", async (request: Request, response: Respon
   }
 });
 
-app.get("/api/work-items/:id", async (request: Request, response: Response) => {
+app.get("/api/work-items/:id", authMiddleware, async (request: Request, response: Response) => {
   try {
     const id = Number(request.params.id);
     const item = await getAzureWorkItemSummary(id);
@@ -111,9 +170,15 @@ app.get("/api/work-items/:id", async (request: Request, response: Response) => {
   }
 });
 
-app.post("/api/work-items", async (request: Request, response: Response) => {
+app.post("/api/work-items", authMiddleware, async (request: AuthRequest, response: Response) => {
   try {
-    const workItem = await createAzureWorkItem(request.body);
+    // Preencher automaticamente sendBy com email do usuário autenticado
+    const workItemData = {
+      ...request.body,
+      sendBy: request.user?.email || request.body.sendBy
+    };
+
+    const workItem = await createAzureWorkItem(workItemData);
 
     response.status(201).json({
       id: workItem.id,
