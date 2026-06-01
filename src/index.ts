@@ -170,12 +170,14 @@ app.get("/api/work-items/:id", authMiddleware, async (request: Request, response
   }
 });
 
-app.post("/api/work-items", authMiddleware, async (request: AuthRequest, response: Response) => {
+app.post("/api/work-items", authMiddleware, async (request: Request, response: Response) => {
+  const req = request as AuthRequest;
+  
   try {
-    // Preencher automaticamente sendBy com email do usuário autenticado
+    const body = req.body as Record<string, any>;
     const workItemData = {
-      ...request.body,
-      sendBy: request.user?.email || request.body.sendBy
+      ...body,
+      sendBy: req.user?.email || body.sendBy || ""
     };
 
     const workItem = await createAzureWorkItem(workItemData);
