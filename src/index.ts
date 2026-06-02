@@ -131,7 +131,7 @@ app.get("/api/azure-field-map", authMiddleware, async (_request: Request, respon
   }
 });
 
-app.get("/api/azure-sync", authMiddleware, async (_request: Request, response: Response) => {
+app.get("/api/azure-sync", async (_request: Request, response: Response) => {
   try {
     const [tracking, relationTypes] = await Promise.all([
       getAzureTrackingData(),
@@ -148,7 +148,7 @@ app.get("/api/azure-sync", authMiddleware, async (_request: Request, response: R
   }
 });
 
-app.get("/api/epics/:epicId/children", authMiddleware, async (request: Request, response: Response) => {
+app.get("/api/epics/:epicId/children", async (request: Request, response: Response) => {
   try {
     const epicId = Number(request.params.epicId);
     const epic = await getAzureEpicChildren(epicId);
@@ -159,7 +159,7 @@ app.get("/api/epics/:epicId/children", authMiddleware, async (request: Request, 
   }
 });
 
-app.get("/api/work-items/:id", authMiddleware, async (request: Request, response: Response) => {
+app.get("/api/work-items/:id", async (request: Request, response: Response) => {
   try {
     const id = Number(request.params.id);
     const item = await getAzureWorkItemSummary(id);
@@ -170,14 +170,14 @@ app.get("/api/work-items/:id", authMiddleware, async (request: Request, response
   }
 });
 
-app.post("/api/work-items", authMiddleware, async (request: Request, response: Response) => {
+app.post("/api/work-items", async (request: Request, response: Response) => {
   const req = request as AuthRequest;
   
   try {
     const body = req.body as Record<string, any>;
     const workItemData = {
       ...body,
-      sendBy: req.user?.email || body.sendBy || ""
+      sendBy: req.user?.name || body.sendBy || ""
     };
 
     const workItem = await createAzureWorkItem(workItemData);
