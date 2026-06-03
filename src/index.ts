@@ -13,10 +13,13 @@ import {
   getAzureTrackingData,
   getAzureWorkItemSummary,
   getAzureAreaOptions,
-  validateAzurePat
+  validateAzurePat,
+  createTitle,
+  WorkItemPayload
 } from "./services/azureDevops.js";
 import { authMiddleware, AuthRequest } from "./middleware/authMiddleware.js";
 import { generateJWT, verifyMicrosoftToken, validateEmailDomain } from "./services/authService.js";
+import { sendTeamsWorkItemCard } from "./services/teamsWebhook.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -56,15 +59,15 @@ app.post("/api/auth/microsoft-token", async (request: Request, response: Respons
     }
 
     const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
-    
+
     // Validar dados do token
     const tokenPayload = verifyMicrosoftToken(payload);
 
     // Validar domínio
     const allowedDomains = (process.env.ALLOWED_DOMAINS || "").split(",").map(d => d.trim());
     if (!validateEmailDomain(tokenPayload.email, allowedDomains)) {
-      return response.status(403).json({ 
-        error: `Acesso negado. Domínio '${tokenPayload.email.split("@")[1]}' não autorizado.` 
+      return response.status(403).json({
+        error: `Acesso negado. Domínio '${tokenPayload.email.split("@")[1]}' não autorizado.`
       });
     }
 
@@ -170,11 +173,12 @@ app.get("/api/work-items/:id", async (request: Request, response: Response) => {
   }
 });
 
-app.post("/api/work-items", async (request: Request, response: Response) => {
+app.post("/api/work-items", authMiddleware, async (request: Request, response: Response) => {
   const req = request as AuthRequest;
-  
+
   try {
     const body = req.body as Record<string, any>;
+
     const workItemData = {
       ...body,
       sendBy: req.user?.name || body.sendBy || ""
@@ -182,15 +186,157 @@ app.post("/api/work-items", async (request: Request, response: Response) => {
 
     const workItem = await createAzureWorkItem(workItemData);
 
+    /**
+     * Buscar nomes selecionados
+     */
+    const tracking = await getAzureTrackingData();
+
+    const epic = tracking.epics.find(
+      (item) => String(item.id) === String(body.epicId)
+    );
+
+    const feature = epic?.features.find(
+      (item) => String(item.id) === String(body.featureId)
+    );
+
+    const parent = feature?.children.find(
+      (item) => String(item.id) === String(body.parentId)
+    );
+
+    /**
+     * Enviar card Teams
+     */
+    try {
+      await sendTeamsWorkItemCard({
+        title: createTitle(workItemData as WorkItemPayload),
+
+        workItemId: workItem.id,
+
+        workItemType:
+          body.kind,
+
+        workItemUrl:
+          workItem._links?.html?.href ??
+          workItem.url,
+
+        epicName:
+          epic?.title || "-",
+
+        featureName:
+          feature?.title || "-",
+
+        parentName:
+          parent?.title || "-",
+
+        areaPath:
+          body.areaPath || "-",
+
+        sendBy:
+          req.user?.name ||
+          body.sendBy ||
+          "Usuário",
+
+        createdUtc:
+          new Date().toISOString()
+      });
+
+    } catch (teamsError) {
+      console.error(
+        "Falha webhook Teams:",
+        teamsError
+      );
+    }
+
     response.status(201).json({
       id: workItem.id,
-      url: workItem._links?.html?.href ?? workItem.url
+      url:
+        workItem._links?.html?.href ??
+        workItem.url
     });
+
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-    response.status(400).json({ error: message });
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unexpected error";
+
+    response.status(400).json({
+      error: message
+    });
   }
 });
+
+/**
+ * =========================================================
+ * TESTE WEBHOOK TEAMS
+ * =========================================================
+ *
+ * Abre no navegador:
+ *
+ * http://localhost:3000/api/test-teams-webhook
+ *
+ * ou produção:
+ *
+ * https://seudominio.com/api/test-teams-webhook
+ *
+ * =========================================================
+ */
+
+app.get(
+  "/api/test-teams-webhook",
+  async (
+    _request: Request,
+    response: Response
+  ) => {
+    try {
+      await sendTeamsWorkItemCard({
+        title:
+          "[WEBHOOK][TEAMS] webhook do teams pbi",
+
+        workItemId: 4272,
+
+        workItemType: "issue",
+
+        workItemUrl:
+          "https://dev.azure.com/ti-testingcompany/Inova%C3%A7%C3%A3o/_workitems/edit/4272/",
+
+        epicName:
+          "TESTE AZURE BRUNO M",
+
+        featureName:
+          "Feature Teste",
+
+        parentName: "",
+
+        areaPath:
+          "Inovação\\Area\\cPanel",
+
+        sendBy:
+          "Bruno Mocellin",
+
+        createdUtc:
+          new Date().toISOString()
+      });
+
+      response.json({
+        ok: true,
+        message:
+          "Webhook Teams enviado com sucesso"
+      });
+
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao enviar webhook";
+
+      response.status(500).json({
+        ok: false,
+        error: message
+      });
+    }
+  }
+);
 
 if (shouldServeClient) {
   app.use(express.static(clientDistPath));
