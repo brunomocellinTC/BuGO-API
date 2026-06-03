@@ -386,7 +386,7 @@ function addOperation(operations: AzurePatchOperation[], fieldName: string | und
   });
 }
 
-function createTitle(payload: WorkItemPayload) {
+export function createTitle(payload: WorkItemPayload) {
   const normalizedTags = payload.titleTag
     .split(",")
     .map((tag) => tag.trim())
