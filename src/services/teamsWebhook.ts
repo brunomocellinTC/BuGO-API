@@ -171,7 +171,11 @@ export async function sendTeamsWorkItemCard(
                       text: `Criado em ${new Date(
                         payload.createdUtc
                       ).toLocaleString(
-                        "pt-BR"
+                        "pt-BR",
+                        {
+                          timeZone:
+                            "America/Sao_Paulo"
+                        }
                       )}`,
 
                       isSubtle: true,
